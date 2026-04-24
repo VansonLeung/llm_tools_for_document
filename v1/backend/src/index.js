@@ -14,6 +14,71 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 const allowedOrigins = new Set(config.corsOrigins);
 
+function normalizeTaskMessageItem(item, index) {
+  if (!item || typeof item !== "object") {
+    throw new Error(`messages[${index}] must be an object.`);
+  }
+
+  if (!["user", "assistant"].includes(item.role)) {
+    throw new Error(`messages[${index}].role must be either user or assistant.`);
+  }
+
+  if (!["text", "document-content"].includes(item.source)) {
+    throw new Error(`messages[${index}].source must be either text or document-content.`);
+  }
+
+  if (item.source === "text") {
+    const content = typeof item.content === "string" ? item.content.trim() : "";
+    if (!content) {
+      throw new Error(`messages[${index}].content is required for text messages.`);
+    }
+
+    return {
+      role: item.role,
+      source: item.source,
+      content
+    };
+  }
+
+  return {
+    role: item.role,
+    source: item.source
+  };
+}
+
+function normalizeTaskInput(body) {
+  const documentId = typeof body?.documentId === "string" ? body.documentId.trim() : "";
+  const legacyMessage = typeof body?.message === "string" ? body.message.trim() : "";
+  const systemPrompt = typeof body?.systemPrompt === "string" ? body.systemPrompt.trim() : "";
+  const messages = Array.isArray(body?.messages)
+    ? body.messages.map((item, index) => normalizeTaskMessageItem(item, index))
+    : [];
+
+  if (!documentId) {
+    throw new Error("documentId is required.");
+  }
+
+  if (!legacyMessage && messages.length === 0) {
+    throw new Error("message or messages are required.");
+  }
+
+  return {
+    documentId,
+    taskInput: {
+      systemPrompt,
+      messages: messages.length > 0
+        ? messages
+        : [
+            {
+              role: "user",
+              source: "text",
+              content: legacyMessage
+            }
+          ]
+    }
+  };
+}
+
 app.use(cors({
   origin(origin, callback) {
     if (!origin) {
@@ -59,9 +124,9 @@ app.get("/api/documents", (_req, res) => {
 app.post("/api/documents/upload", upload.array("files"), async (req, res) => {
   try {
     const kind = req.body.kind;
-    if (!["markdown", "paged-markdown"].includes(kind)) {
+    if (!["markdown", "paged-markdown", "json"].includes(kind)) {
       return res.status(400).json({
-        error: "kind must be either markdown or paged-markdown."
+        error: "kind must be one of markdown, paged-markdown, or json."
       });
     }
 
@@ -81,18 +146,23 @@ app.post("/api/documents/upload", upload.array("files"), async (req, res) => {
 
 app.post("/api/agents/:agentId/tasks", async (req, res) => {
   const { agentId } = req.params;
-  const { documentId, message } = req.body || {};
+  let documentId;
+  let taskInput;
 
-  if (!documentId || !message) {
+  try {
+    const normalized = normalizeTaskInput(req.body || {});
+    documentId = normalized.documentId;
+    taskInput = normalized.taskInput;
+  } catch (error) {
     return res.status(400).json({
-      error: "documentId and message are required."
+      error: error.message
     });
   }
 
   const task = taskStore.createTask({
     agentId,
     documentId,
-    message
+    taskInput
   });
 
   res.status(202).json({
@@ -105,7 +175,7 @@ app.post("/api/agents/:agentId/tasks", async (req, res) => {
     taskId: task.id,
     agentId,
     documentId,
-    message
+    taskInput
   }).catch((error) => {
     taskStore.failTask(task.id, error.message);
   });

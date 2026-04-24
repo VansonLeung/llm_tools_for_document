@@ -1,7 +1,33 @@
+import { buildJsonTools } from "../tools/jsonTools.js";
 import { buildMarkdownTools } from "../tools/markdownTools.js";
 import { buildPagedMarkdownSearchTools, buildPagedMarkdownTools } from "../tools/pagedMarkdownTools.js";
 
 const agents = [
+  {
+    id: "json-rewrite",
+    name: "JSON Rewrite Agent",
+    description: "Reads a JSON file, rewrites requested values, and returns replacement mappings.",
+    supportedDocumentKinds: ["json"],
+    capabilities: [
+      "Read the uploaded JSON file structure and values",
+      "Inspect individual JSON paths or discover string fields",
+      "Return rewritten JSON plus a mapping of replaced fields",
+      "Ask for clarification when rewrite instructions are ambiguous"
+    ],
+    async buildTools(document) {
+      return buildJsonTools(document);
+    },
+    buildSystemPrompt(document) {
+      return [
+        "You are a JSON rewrite agent.",
+        `You are analyzing the uploaded JSON document named \"${document.name}\".`,
+        "Use tools before making factual claims about JSON structure or field values.",
+        "When the user's rewrite instructions are sufficiently clear, respond in JSON with keys rewritten_json and replaced_fields.",
+        "Each replaced_fields entry should include the field path when known, plus the original and replacement values.",
+        "If the rewrite target, replacement policy, or allowed transformations are ambiguous, ask one concise clarification question instead of guessing."
+      ].join(" ");
+    }
+  },
   {
     id: "markdown-vetting",
     name: "Markdown Vetting Agent",

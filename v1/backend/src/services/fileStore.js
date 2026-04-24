@@ -28,8 +28,8 @@ class FileStore {
       throw new Error("At least one file is required.");
     }
 
-    if (kind === "markdown" && files.length !== 1) {
-      throw new Error("Markdown uploads must contain exactly one file.");
+    if (["markdown", "json"].includes(kind) && files.length !== 1) {
+      throw new Error(`${kind === "json" ? "JSON" : "Markdown"} uploads must contain exactly one file.`);
     }
 
     await this.ensureStorageDir();
@@ -59,7 +59,7 @@ class FileStore {
     const document = {
       id: documentId,
       kind,
-      name: kind === "markdown" ? storedFiles[0].originalName : path.basename(documentDir),
+      name: ["markdown", "json"].includes(kind) ? storedFiles[0].originalName : path.basename(documentDir),
       uploadedAt: new Date().toISOString(),
       files: storedFiles.map((file, index) => ({
         ...file,
@@ -79,6 +79,29 @@ class FileStore {
     return Array.from(this.documents.values()).sort((left, right) => {
       return right.uploadedAt.localeCompare(left.uploadedAt);
     });
+  }
+
+  async readDocumentContent(documentOrId) {
+    const document = typeof documentOrId === "string"
+      ? this.getDocument(documentOrId)
+      : documentOrId;
+
+    if (!document) {
+      throw new Error("Document not found.");
+    }
+
+    if (["markdown", "json"].includes(document.kind)) {
+      return fs.readFile(document.files[0].path, "utf8");
+    }
+
+    const parts = [];
+
+    for (const file of document.files) {
+      const content = await fs.readFile(file.path, "utf8");
+      parts.push(`Page ${file.pageNumber}: ${file.originalName}\n${content}`);
+    }
+
+    return parts.join("\n\n");
   }
 }
 

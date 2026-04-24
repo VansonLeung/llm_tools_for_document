@@ -3,12 +3,12 @@ export type Agent = {
   name: string;
   description: string;
   capabilities: string[];
-  supportedDocumentKinds: Array<"markdown" | "paged-markdown">;
+  supportedDocumentKinds: Array<"markdown" | "paged-markdown" | "json">;
 };
 
 export type DocumentRecord = {
   id: string;
-  kind: "markdown" | "paged-markdown";
+  kind: "markdown" | "paged-markdown" | "json";
   name: string;
   uploadedAt: string;
   files: Array<{
@@ -27,11 +27,31 @@ export type TaskEvent = {
   payload: Record<string, unknown>;
 };
 
+export type TaskMessageRole = "user" | "assistant";
+
+export type TaskMessageSource = "text" | "document-content";
+
+export type TaskMessageItem = {
+  role: TaskMessageRole;
+  source: TaskMessageSource;
+  content?: string;
+};
+
+export type CreateTaskInput = {
+  message?: string;
+  systemPrompt?: string;
+  messages?: TaskMessageItem[];
+};
+
 export type TaskRecord = {
   id: string;
   agentId: string;
   documentId: string;
   message: string;
+  messageInput?: {
+    systemPrompt: string;
+    messages: TaskMessageItem[];
+  };
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -68,7 +88,7 @@ export async function fetchDocuments() {
   return request<{ documents: DocumentRecord[] }>("/documents");
 }
 
-export async function uploadDocument(kind: "markdown" | "paged-markdown", files: File[]) {
+export async function uploadDocument(kind: "markdown" | "paged-markdown" | "json", files: File[]) {
   const formData = new FormData();
   formData.append("kind", kind);
   files.forEach((file) => formData.append("files", file));
@@ -78,12 +98,12 @@ export async function uploadDocument(kind: "markdown" | "paged-markdown", files:
   });
 }
 
-export async function createTask(agentId: string, documentId: string, message: string) {
+export async function createTask(agentId: string, documentId: string, input: CreateTaskInput) {
   return request<{ taskId: string; task: TaskRecord }>(`/agents/${agentId}/tasks`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ documentId, message })
+    body: JSON.stringify({ documentId, ...input })
   });
 }

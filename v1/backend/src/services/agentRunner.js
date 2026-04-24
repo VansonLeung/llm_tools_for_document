@@ -37,7 +37,38 @@ function chunkAssistantResponse(content) {
   return content.match(/[\s\S]{1,160}/g) || [];
 }
 
-export async function runAgentTask({ taskStore, taskId, agentId, documentId, message }) {
+function buildSystemPrompt(agent, document, taskInput) {
+  const parts = [agent.buildSystemPrompt(document)];
+
+  if (taskInput?.systemPrompt) {
+    parts.push(taskInput.systemPrompt);
+  }
+
+  return parts.filter(Boolean).join("\n\n");
+}
+
+async function buildTaskMessages(taskInput, readDocumentContent) {
+  const messages = [];
+
+  for (const item of taskInput.messages) {
+    if (item.source === "document-content") {
+      messages.push({
+        role: item.role,
+        content: await readDocumentContent()
+      });
+      continue;
+    }
+
+    messages.push({
+      role: item.role,
+      content: item.content
+    });
+  }
+
+  return messages;
+}
+
+export async function runAgentTask({ taskStore, taskId, agentId, documentId, taskInput }) {
   const agent = getAgentById(agentId);
   if (!agent) {
     throw new Error(`Unknown agent \"${agentId}\".`);
@@ -62,15 +93,21 @@ export async function runAgentTask({ taskStore, taskId, agentId, documentId, mes
     toolDefinitions.map((tool) => [tool.definition.function.name, tool])
   );
 
+  let documentContentPromise = null;
+  const readDocumentContent = async () => {
+    if (!documentContentPromise) {
+      documentContentPromise = fileStore.readDocumentContent(document);
+    }
+
+    return documentContentPromise;
+  };
+
   const messages = [
     {
       role: "system",
-      content: agent.buildSystemPrompt(document)
+      content: buildSystemPrompt(agent, document, taskInput)
     },
-    {
-      role: "user",
-      content: message
-    }
+    ...(await buildTaskMessages(taskInput, readDocumentContent))
   ];
 
   taskStore.appendEvent(taskId, "agent.started", {
