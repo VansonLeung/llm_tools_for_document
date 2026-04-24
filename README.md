@@ -1,5 +1,7 @@
 # Mini Agentic Document Vetting
 
+<img width="100%" alt="螢幕截圖 2026-04-24 15 15 27" src="https://github.com/user-attachments/assets/a3afa26a-3f23-4f76-b251-a0b314e6a6a1" />
+
 A small agentic document vetting scaffold built in `v1/`.
 It includes a Node.js/Express backend and a React + Vite frontend for uploading documents, selecting an agent, and receiving streaming responses.
 
